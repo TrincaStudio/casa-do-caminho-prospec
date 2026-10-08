@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: casa-do-caminho-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: REPOSITORY_BACKEND
+        value: supabase
+      - key: RESEARCH_MODE
+        value: live
+      - key: AUTH_REQUIRED
+        value: "true"
+
+  - type: worker
+    name: casa-do-caminho-worker
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.worker
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: REPOSITORY_BACKEND
+        value: supabase
+      - key: RESEARCH_MODE
+        value: live
+      - key: AUTH_REQUIRED
+        value: "true"

@@ -1,0 +1,43 @@
+from enum import StrEnum
+
+
+class ResearchStatus(StrEnum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    COMPLETED_WITH_WARNINGS = "COMPLETED_WITH_WARNINGS"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class StepStatus(StrEnum):
+    WAITING = "WAITING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+
+
+class ResultStatus(StrEnum):
+    FOUND = "FOUND"
+    NOT_FOUND = "NOT_FOUND"
+    INCONCLUSIVE = "INCONCLUSIVE"
+    REQUIRES_HUMAN_REVIEW = "REQUIRES_HUMAN_REVIEW"
+
+
+class SourceType(StrEnum):
+    OFFICIAL_GOVERNMENT = "OFFICIAL_GOVERNMENT"
+    REGULATORY = "REGULATORY"
+    OFFICIAL_COMPANY = "OFFICIAL_COMPANY"
+    INSTITUTIONAL = "INSTITUTIONAL"
+    JOURNALISTIC = "JOURNALISTIC"
+    OTHER = "OTHER"
+
+
+class SearchGroup(StrEnum):
+    IDENTIFICATION = "identification"
+    INSTITUTIONAL = "institutional"
+    SOCIAL_RESPONSIBILITY = "social_responsibility"
+    ESG = "esg"
+    INTEGRITY = "integrity"
+    COMPATIBILITY = "compatibility"
