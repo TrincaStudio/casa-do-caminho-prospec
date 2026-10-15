@@ -29,6 +29,13 @@ def test_planner_groups_questions_and_reduces_searches():
     assert plan.groups[SearchGroup.COMPATIBILITY]
 
 
+def test_planner_keeps_search_queries_broad_enough_for_web_search():
+    plan = create_research_plan({"name": "Trinca Studio"})
+
+    assert '"Trinca Studio" empresa cadastro' in [item.query for item in plan.searches]
+    assert all(len(item.query.split()) <= 5 for item in plan.searches if not item.query.startswith("site:"))
+
+
 @pytest.mark.parametrize(
     ("url", "expected"),
     [

@@ -75,14 +75,14 @@ def create_research_plan(company: dict) -> ResearchPlan:
     identity = " ".join(part for part in [f'"{name}"', cnpj] if part)
 
     searches = [
-        SearchPlanItem(SearchGroup.IDENTIFICATION, f"{identity} razao social cnpj sede setor site oficial", "Dados cadastrais e perfil"),
-        SearchPlanItem(SearchGroup.IDENTIFICATION, f"{identity} produtos servicos porte tempo de mercado", "Perfil comercial"),
-        SearchPlanItem(SearchGroup.INSTITUTIONAL, f"{identity} missao valores codigo de etica compliance direitos humanos diversidade inclusao", "Valores e politicas"),
-        SearchPlanItem(SearchGroup.SOCIAL_RESPONSIBILITY, f"{identity} responsabilidade social investimento social privado instituto fundacao voluntariado doacoes saude oncologia", "Responsabilidade social"),
-        SearchPlanItem(SearchGroup.SOCIAL_RESPONSIBILITY, f"{identity} leis de incentivo campanhas sociais OSCs apoiadas parcerias sociais", "Projetos sociais e parcerias"),
-        SearchPlanItem(SearchGroup.ESG, f"{identity} ESG sustentabilidade relatorio anual ambiental governanca", "ESG e sustentabilidade"),
-        SearchPlanItem(SearchGroup.INTEGRITY, f"{identity} sancoes multas investigacao corrupcao fraude lavagem de dinheiro", "Integridade e sancoes"),
-        SearchPlanItem(SearchGroup.INTEGRITY, f"{identity} processo judicial trabalhista ambiental TAC ministerio publico recuperacao judicial falencia noticias negativas", "Reputacao e controversias"),
+        SearchPlanItem(SearchGroup.IDENTIFICATION, f"{identity} empresa cadastro", "Dados cadastrais e perfil"),
+        SearchPlanItem(SearchGroup.IDENTIFICATION, f"{identity} produtos servicos", "Perfil comercial"),
+        SearchPlanItem(SearchGroup.INSTITUTIONAL, f"{identity} missao valores", "Valores e politicas"),
+        SearchPlanItem(SearchGroup.SOCIAL_RESPONSIBILITY, f"{identity} responsabilidade social", "Responsabilidade social"),
+        SearchPlanItem(SearchGroup.SOCIAL_RESPONSIBILITY, f"{identity} doacoes parcerias", "Projetos sociais e parcerias"),
+        SearchPlanItem(SearchGroup.ESG, f"{identity} ESG sustentabilidade", "ESG e sustentabilidade"),
+        SearchPlanItem(SearchGroup.INTEGRITY, f"{identity} multas sancoes", "Integridade e sancoes"),
+        SearchPlanItem(SearchGroup.INTEGRITY, f"{identity} processos noticias", "Reputacao e controversias"),
     ]
     if official_domain:
         searches.extend(
