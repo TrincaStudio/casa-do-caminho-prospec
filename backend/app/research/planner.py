@@ -41,6 +41,7 @@ class SearchPlanItem:
     group: SearchGroup
     query: str
     purpose: str
+    is_general: bool = False
 
 
 @dataclass
@@ -75,6 +76,7 @@ def create_research_plan(company: dict) -> ResearchPlan:
     identity = " ".join(part for part in [f'"{name}"', cnpj] if part)
 
     searches = [
+        SearchPlanItem(SearchGroup.IDENTIFICATION, identity, "Busca geral da empresa", is_general=True),
         SearchPlanItem(SearchGroup.IDENTIFICATION, f"{identity} empresa cadastro", "Dados cadastrais e perfil"),
         SearchPlanItem(SearchGroup.IDENTIFICATION, f"{identity} produtos servicos", "Perfil comercial"),
         SearchPlanItem(SearchGroup.INSTITUTIONAL, f"{identity} missao valores", "Valores e politicas"),

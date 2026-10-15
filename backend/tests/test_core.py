@@ -3,6 +3,7 @@ import pytest
 from app.core.checklist import SECTIONS
 from app.core.enums import ResearchStatus, ResultStatus
 from app.core.urltools import domain_from_url, normalize_url
+from app.research.orchestrator import _evidence_excerpt
 from app.research.planner import SearchGroup, classify_source, create_research_plan, select_relevant_sources
 
 
@@ -32,6 +33,8 @@ def test_planner_groups_questions_and_reduces_searches():
 def test_planner_keeps_search_queries_broad_enough_for_web_search():
     plan = create_research_plan({"name": "Trinca Studio"})
 
+    assert plan.searches[0].is_general is True
+    assert plan.searches[0].query == '"Trinca Studio"'
     assert '"Trinca Studio" empresa cadastro' in [item.query for item in plan.searches]
     assert all(len(item.query.split()) <= 5 for item in plan.searches if not item.query.startswith("site:"))
 
@@ -57,3 +60,12 @@ def test_select_relevant_sources_deduplicates_urls():
     ]
     selected = select_relevant_sources(hits, {"name": "Empresa"}, limit=10)
     assert len(selected) == 2
+
+
+def test_evidence_excerpt_removes_markdown_markup():
+    excerpt = _evidence_excerpt(
+        "![logo](https://example.com/logo.png) [Conheca a VOLL](https://example.com) **Texto publico**",
+        "fallback",
+    )
+
+    assert excerpt == "logo Conheca a VOLL Texto publico"

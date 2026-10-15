@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 from datetime import datetime, timedelta, timezone
 from time import monotonic
 from typing import Any
@@ -43,7 +44,11 @@ def _mock_search(query: str, company: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _evidence_excerpt(content: str, fallback: str) -> str:
-    compact = " ".join(content.split())
+    compact = re.sub(r"!\[([^\]]*)\]\([^)]*\)", r"\1", content)
+    compact = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", compact)
+    compact = re.sub(r"<[^>]+>", " ", compact)
+    compact = re.sub(r"[`*_#~]+", "", compact)
+    compact = " ".join(compact.split())
     if not compact:
         compact = fallback
     return compact[:900]
@@ -90,7 +95,7 @@ class ResearchOrchestrator:
                         await self.repository.save_search_execution(research_id, item.group.value, item.query, query_hash, [], "FAILED", str(exc))
                         continue
                 for hit in hits:
-                    all_hits.append({**hit, "group": item.group.value})
+                    all_hits.append({**hit, "group": item.group.value, "is_general": item.is_general})
 
             selected_sources = select_relevant_sources(all_hits, company, settings.max_urls_per_research)
             await self.repository.increment_usage(research_id, urls_selected=len(selected_sources))
@@ -156,6 +161,7 @@ class ResearchOrchestrator:
                         "url": source["url"],
                         "source_type": str(source.get("source_type", SourceType.OTHER)),
                         "excerpt": excerpt,
+                        "is_general": source.get("is_general", False),
                     }
                 )
 
@@ -164,6 +170,14 @@ class ResearchOrchestrator:
                     continue
                 await self.repository.upsert_progress_step(research_id, group.value, GROUP_TITLES[group], StepStatus.PROCESSING, 0, len(questions), "Analisando evidencias")
                 group_evidences = evidence_by_group.get(group, [])
+                general_evidences = [
+                    item
+                    for values in evidence_by_group.values()
+                    for item in values
+                    if item.get("is_general")
+                ]
+                if general_evidences:
+                    group_evidences = list({item["evidence_id"]: item for item in [*general_evidences, *group_evidences]}.values())
                 if group == SearchGroup.COMPATIBILITY:
                     group_evidences = [item for values in evidence_by_group.values() for item in values]
                 question_payload = [
