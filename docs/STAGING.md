@@ -35,6 +35,9 @@ Variaveis:
 - `SUPABASE_URL`: Project URL do Supabase.
 - `SUPABASE_ANON_KEY`: anon public key.
 - `SUPABASE_SERVICE_ROLE_KEY`: service_role key, secret.
+- `SUPABASE_JWT_SECRET`: JWT secret do Supabase, somente se o projeto usar assinatura HS256; nunca exponha no frontend.
+- `SUPABASE_JWKS_URL`: URL JWKS, somente se usar assinatura assimétrica; por padrao pode ser omitida e sera derivada de `SUPABASE_URL`.
+- `SUPABASE_JWT_AUDIENCE=authenticated`.
 - `OPENAI_API_KEY`: chave da OpenAI.
 - `OPENAI_MODEL`: modelo configurado, padrao `gpt-5-mini`.
 - `BRAVE_SEARCH_API_KEY`: chave Brave Search.

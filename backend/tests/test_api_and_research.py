@@ -10,6 +10,7 @@ def setup_module():
     settings.auth_required = False
     settings.research_mode = "mock"
     settings.repository_backend = "memory"
+    settings.cors_origins = "http://localhost:5173,https://casa-do-caminho-staging.netlify.app"
 
 
 def test_api_requires_auth_when_enabled():
@@ -21,6 +22,43 @@ def test_api_requires_auth_when_enabled():
     response = client.get("/api/research")
     assert response.status_code == 401
     settings.auth_required = False
+
+
+def test_cors_preflight_allows_configured_netlify_origin():
+    from app.main import app
+
+    client = TestClient(app)
+    origin = "https://casa-do-caminho-staging.netlify.app"
+    response = client.options(
+        "/api/research",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    assert "authorization" in response.headers["access-control-allow-headers"].lower()
+    assert "content-type" in response.headers["access-control-allow-headers"].lower()
+
+
+def test_cors_preflight_rejects_unconfigured_origin():
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.options(
+        "/api/research",
+        headers={
+            "Origin": "https://unauthorized.example.com",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers
 
 
 def test_create_list_get_and_cancel_research():
