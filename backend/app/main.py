@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta, timezone
@@ -11,6 +13,7 @@ from app.repositories.factory import get_repository
 from app.research.planner import CHECKLIST_VERSION, GROUP_TITLES, create_research_plan
 
 app = FastAPI(title=settings.app_name)
+local_worker_task: asyncio.Task | None = None
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -22,7 +25,19 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup() -> None:
+    global local_worker_task
     settings.validate_staging_readiness()
+    if settings.app_env == "development" and settings.repository_backend == "memory":
+        from app.worker import main as worker_main
+
+        local_worker_task = asyncio.create_task(worker_main(), name="local-research-worker")
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    if local_worker_task:
+        local_worker_task.cancel()
+        await asyncio.gather(local_worker_task, return_exceptions=True)
 
 
 @app.get("/api/health")
