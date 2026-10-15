@@ -18,10 +18,27 @@ type Usage = { brave_searches: number; urls_selected: number; firecrawl_calls: n
 type Research = { id: string; status: string; company: { name: string; cnpj?: string; website?: string }; sections?: Section[]; progress?: Progress[]; usage?: Usage; error_public?: string; completed_at?: string };
 
 const resultLabels: Record<string, string> = {
-  FOUND: 'ENCONTRADO',
-  NOT_FOUND: 'NAO LOCALIZADO',
-  INCONCLUSIVE: 'INCONCLUSIVO',
-  REQUIRES_HUMAN_REVIEW: 'REQUER VALIDACAO HUMANA',
+  FOUND: 'Encontrado',
+  NOT_FOUND: 'Não localizado',
+  INCONCLUSIVE: 'Inconclusivo',
+  REQUIRES_HUMAN_REVIEW: 'Revisão necessária',
+};
+
+const researchStatusLabels: Record<string, string> = {
+  PENDING: 'Na fila',
+  PROCESSING: 'Em andamento',
+  COMPLETED: 'Concluída',
+  COMPLETED_WITH_WARNINGS: 'Concluída com observações',
+  FAILED: 'Não concluída',
+  CANCELLED: 'Cancelada',
+};
+
+const progressStatusLabels: Record<string, string> = {
+  WAITING: 'Aguardando início',
+  PROCESSING: 'Em análise',
+  COMPLETED: 'Concluído',
+  FAILED: 'Não concluído',
+  SKIPPED: 'Não se aplica',
 };
 
 function authHeader(session: Session | null): Record<string, string> {
@@ -50,13 +67,13 @@ function Login({ onSession }: { onSession: (session: Session) => void }) {
     const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (authError || !data.session) {
-      setError(authError?.message || 'Nao foi possivel autenticar.');
+      setError(authError?.message || 'Não foi possível autenticar.');
       return;
     }
     onSession(data.session);
   }
 
-  return <main><Header session={null} onLogout={() => {}} /><section className="login"><form onSubmit={submit}><p className="eyebrow">Acesso interno</p><h1>Casa do Caminho</h1><label>Email<input required type="email" value={email} onChange={e => setEmail(e.target.value)} /></label><label>Senha<input required type="password" value={password} onChange={e => setPassword(e.target.value)} /></label>{error && <p className="error">{error}</p>}<button className="primary full" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</button></form></section></main>;
+  return <main><Header session={null} onLogout={() => {}} /><section className="login"><form onSubmit={submit}><p className="eyebrow">Acesso interno</p><h1>Pesquisa de Parcerias</h1><label>E-mail<input required type="email" value={email} onChange={e => setEmail(e.target.value)} /></label><label>Senha<input required type="password" value={password} onChange={e => setPassword(e.target.value)} /></label>{error && <p className="error">{error}</p>}<button className="primary full" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</button></form></section></main>;
 }
 
 function App() {
@@ -77,7 +94,8 @@ function App() {
   }, []);
 
   async function api(path: string, options: RequestInit = {}) {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...authHeader(session), ...(options.headers as Record<string, string> | undefined) };
+    const currentSession = supabase ? ((await supabase.auth.getSession()).data.session || session) : session;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...authHeader(currentSession), ...(options.headers as Record<string, string> | undefined) };
     const response = await fetch(`${API}${path}`, { ...options, headers });
     if (!response.ok) throw new Error(await response.text());
     return response.json();
@@ -88,7 +106,7 @@ function App() {
     try {
       setItems(await api('/api/research'));
     } catch {
-      setError('Nao foi possivel carregar o historico.');
+      setError('Não foi possível carregar o histórico.');
     }
   }
 
@@ -110,7 +128,7 @@ function App() {
       setActive(await api(`/api/research/${research.id}`));
       await load();
     } catch {
-      setError('Nao foi possivel criar a pesquisa.');
+      setError('Não foi possível criar a pesquisa.');
     } finally {
       setLoading(false);
     }
@@ -129,17 +147,17 @@ function App() {
 
   if (!session) return <Login onSession={setSession} />;
 
-  if (active) return <main><Header session={session} onLogout={logout} /><button className="back" onClick={() => setActive(null)}>Voltar as pesquisas</button><section className="hero"><div><p className="eyebrow">Dossie empresarial</p><h1>{active.company.name}</h1><p>{active.company.cnpj || 'CNPJ nao informado'} {active.company.website && <> · <a href={active.company.website} target="_blank" rel="noopener noreferrer">site <ExternalLink size={12} /></a></>}</p></div><span className={`state ${active.status.toLowerCase()}`}>{active.status}</span></section><ProgressList progress={active.progress || []} usage={active.usage} />{['PENDING', 'PROCESSING'].includes(active.status) && <div className="processing"><div className="spinner" /><h2>Pesquisa em andamento</h2><p>O progresso vem do backend e permanece salvo ao atualizar a pagina.</p><button className="secondary" onClick={() => cancel(active.id)}><XCircle size={16} /> Cancelar</button></div>}{active.status === 'FAILED' && <div className="processing"><h2>Nao foi possivel concluir</h2><p>{active.error_public}</p></div>}{active.sections && active.sections.length > 0 && <div className="sections">{active.sections.map(section => <section className="section" key={section.key}><button className="sectionHead" onClick={() => setOpen({ ...open, [section.key]: !open[section.key] })}><div><p>{section.results.length} itens analisados</p><h2>{section.title}</h2></div>{open[section.key] === false ? <ChevronDown /> : <ChevronUp />}</button>{open[section.key] !== false && <div>{section.results.map(result => <article className="result" key={result.question_key}><div className="resultTop"><h3>{result.question}</h3><Badge status={result.status} /></div><p className="answer">{result.answer}</p><p className="summary">{result.summary}</p>{result.evidences?.length > 0 && <div className="evidence"><strong>Evidencias ({result.evidences.length})</strong>{result.evidences.map(evidence => <a key={evidence.id} href={evidence.source?.url || '#'} target="_blank" rel="noopener noreferrer"><span>{evidence.source?.title || evidence.source?.domain || evidence.source?.url}</span><small>{evidence.excerpt}</small><ExternalLink size={14} /></a>)}</div>}{result.status === 'REQUIRES_HUMAN_REVIEW' && <p className="legal">Este item exige validacao humana. A existencia de registro nao comprova culpa, irregularidade ou condenacao.</p>}</article>)}</div>}</section>)}</div>}</main>;
+  if (active) return <main><Header session={session} onLogout={logout} /><button className="back" onClick={() => setActive(null)}>Voltar às pesquisas</button><section className="hero"><div><p className="eyebrow">Dossiê empresarial</p><h1>{active.company.name}</h1><p>{active.company.cnpj || 'CNPJ não informado'} {active.company.website && <> · <a href={active.company.website} target="_blank" rel="noopener noreferrer">site <ExternalLink size={12} /></a></>}</p></div><span className={`state ${active.status.toLowerCase()}`}>{researchStatusLabels[active.status] || active.status}</span></section><ProgressList progress={active.progress || []} />{['PENDING', 'PROCESSING'].includes(active.status) && <div className="processing"><div className="spinner" /><h2>Sua pesquisa está sendo preparada</h2><p>Estamos consultando fontes públicas e organizando as informações. Você pode deixar esta página aberta.</p><button className="secondary" onClick={() => cancel(active.id)}><XCircle size={16} /> Cancelar pesquisa</button></div>}{active.status === 'FAILED' && <div className="processing"><h2>Não foi possível concluir</h2><p>{active.error_public}</p></div>}{active.sections && active.sections.length > 0 && <div className="sections">{active.sections.map(section => <section className="section" key={section.key}><button className="sectionHead" onClick={() => setOpen({ ...open, [section.key]: !open[section.key] })}><div><p>{section.results.length} itens analisados</p><h2>{section.title}</h2></div>{open[section.key] === false ? <ChevronDown /> : <ChevronUp />}</button>{open[section.key] !== false && <div>{section.results.map(result => <article className="result" key={result.question_key}><div className="resultTop"><h3>{result.question}</h3><Badge status={result.status} /></div><p className="answer">{result.answer}</p><p className="summary">{result.summary}</p>{result.evidences?.length > 0 && <div className="evidence"><strong>Evidências ({result.evidences.length})</strong>{result.evidences.map(evidence => <a key={evidence.id} href={evidence.source?.url || '#'} target="_blank" rel="noopener noreferrer"><span>{evidence.source?.title || evidence.source?.domain || evidence.source?.url}</span><small>{evidence.excerpt}</small><ExternalLink size={14} /></a>)}</div>}{result.status === 'REQUIRES_HUMAN_REVIEW' && <p className="legal">Este item exige validação humana. A existência de registro não comprova culpa, irregularidade ou condenação.</p>}</article>)}</div>}</section>)}</div>}</main>;
 
-  return <main><Header session={session} onLogout={logout} /><section className="hero"><div><p className="eyebrow">Inteligencia para parcerias</p><h1>Pesquisa de empresas</h1><p>Centralize informacoes publicas, evidencias e fontes para apoiar a analise de potenciais parceiros.</p></div><button className="primary" onClick={() => setCreating(true)}><Plus size={18} /> Nova pesquisa</button></section>{error && <p className="error">{error}</p>}{creating && <div className="modal"><form onSubmit={submit}><div className="modalTop"><div><p className="eyebrow">Nova pesquisa</p><h2>Qual empresa vamos pesquisar?</h2></div><button type="button" className="close" onClick={() => setCreating(false)}>x</button></div><label>Nome da empresa *<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Empresa S.A." /></label><label>CNPJ <input value={form.cnpj} onChange={e => setForm({ ...form, cnpj: e.target.value })} placeholder="00.000.000/0001-00" /></label><label>Site <input value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} placeholder="https://..." /></label><button className="primary full" disabled={loading}>{loading ? 'Criando...' : <><Search size={17} /> Iniciar pesquisa</>}</button></form></div>}<section className="list"><div className="listTitle"><div><p className="eyebrow">Historico</p><h2>Pesquisas recentes</h2></div><span>{items.length} pesquisas</span></div>{items.length === 0 ? <div className="empty"><Database /><h3>Nenhuma pesquisa ainda</h3><p>Crie a primeira pesquisa para montar o dossie de uma empresa.</p></div> : items.map(item => <button className="card" key={item.id} onClick={async () => setActive(await api(`/api/research/${item.id}`))}><div className="companyIcon"><Building2 /></div><div className="company"><strong>{item.company.name}</strong><span>{item.company.cnpj || 'CNPJ nao informado'}</span></div><span className={`state ${item.status.toLowerCase()}`}>{item.status}</span><span className="arrow">→</span></button>)}</section></main>;
+  return <main><Header session={session} onLogout={logout} /><section className="hero"><div><p className="eyebrow">Inteligência para parcerias</p><h1>Pesquisa de empresas</h1><p>Centralize informações públicas, evidências e fontes para apoiar a análise de potenciais parceiros.</p></div><button className="primary" onClick={() => setCreating(true)}><Plus size={18} /> Nova pesquisa</button></section>{error && <p className="error">{error}</p>}{creating && <div className="modal"><form onSubmit={submit}><div className="modalTop"><div><p className="eyebrow">Nova pesquisa</p><h2>Qual empresa vamos pesquisar?</h2></div><button type="button" className="close" onClick={() => setCreating(false)}>×</button></div><label>Nome da empresa *<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Empresa S.A." /></label><label>CNPJ <input value={form.cnpj} onChange={e => setForm({ ...form, cnpj: e.target.value })} placeholder="00.000.000/0001-00" /></label><label>Site <input value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} placeholder="https://..." /></label><button className="primary full" disabled={loading}>{loading ? 'Criando...' : <><Search size={17} /> Iniciar pesquisa</>}</button></form></div>}<section className="list"><div className="listTitle"><div><p className="eyebrow">Histórico</p><h2>Pesquisas recentes</h2></div><span>{items.length} pesquisas</span></div>{items.length === 0 ? <div className="empty"><Database /><h3>Nenhuma pesquisa ainda</h3><p>Crie a primeira pesquisa para montar o dossiê de uma empresa.</p></div> : items.map(item => <button className="card" key={item.id} onClick={async () => setActive(await api(`/api/research/${item.id}`))}><div className="companyIcon"><Building2 /></div><div className="company"><strong>{item.company.name}</strong><span>{item.company.cnpj || 'CNPJ não informado'}</span></div><span className={`state ${item.status.toLowerCase()}`}>{researchStatusLabels[item.status] || item.status}</span><span className="arrow">→</span></button>)}</section></main>;
 }
 
-function ProgressList({ progress, usage }: { progress: Progress[]; usage?: Usage }) {
-  return <section className="progressGrid">{progress.map(item => <div className="progressItem" key={item.key}><span className={`dot ${item.status.toLowerCase()}`} /><strong>{item.title}</strong><small>{item.status} · {item.completed_items}/{item.total_items}</small></div>)}{usage && <div className="progressItem usage"><strong>Consumo</strong><small>Brave {usage.brave_searches} · URLs {usage.urls_selected} · Firecrawl {usage.firecrawl_calls} · OpenAI {usage.openai_calls}</small></div>}</section>;
+function ProgressList({ progress }: { progress: Progress[] }) {
+  return <section className="progressGrid">{progress.map(item => <div className="progressItem" key={item.key}><span className={`dot ${item.status.toLowerCase()}`} /><strong>{item.title}</strong><small>{progressStatusLabels[item.status] || item.status}</small></div>)}</section>;
 }
 
 function Header({ session, onLogout }: { session: Session | null; onLogout: () => void }) {
-  return <header><div className="brand"><div className="mark">CC</div><div><strong>Casa do Caminho</strong><span>Pesquisa de Parcerias</span></div></div><div className="headerActions"><span className="secure">Fontes publicas · Evidencias rastreaveis</span>{session && <button className="logout" onClick={onLogout}><LogOut size={16} /> Sair</button>}</div></header>;
+  return <header><div className="brand"><img className="brandLogo" src="/casa-do-caminho-logo-transparent.png" alt="Instituto Casa do Caminho" /><div className="brandText"><strong>Pesquisa de Parcerias</strong><span>Instituto Casa do Caminho</span></div></div><div className="headerActions"><span className="secure">Fontes públicas · Evidências rastreáveis</span>{session && <button className="logout" onClick={onLogout}><LogOut size={16} /> Sair</button>}</div></header>;
 }
 
 createRoot(document.getElementById('root')!).render(<App />);
