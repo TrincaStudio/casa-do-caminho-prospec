@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from time import monotonic
@@ -15,6 +16,8 @@ from app.core.urltools import domain_from_url, normalize_url
 from app.repositories.base import Repository
 from app.research.planner import GROUP_TITLES, create_research_plan, select_relevant_sources
 from app.services.ai import analyze_questions
+
+logger = logging.getLogger("research-orchestrator")
 
 
 def _hash(value: str) -> str:
@@ -62,8 +65,10 @@ class ResearchOrchestrator:
         started = monotonic()
         detail = await self.repository.get_research(research_id)
         if not detail:
+            logger.warning("research not found: %s", research_id)
             return
         if detail.status == ResearchStatus.CANCELLED:
+            logger.info("research already cancelled: %s", research_id)
             return
 
         warnings = 0
@@ -77,6 +82,7 @@ class ResearchOrchestrator:
         try:
             all_hits: list[dict[str, Any]] = []
             searches = plan.searches[: settings.max_brave_queries_per_research]
+            logger.info("research %s started: %s searches", research_id, len(searches))
             for index, item in enumerate(searches, start=1):
                 await self.repository.upsert_progress_step(research_id, item.group.value, GROUP_TITLES[item.group], StepStatus.PROCESSING, 0, len(plan.groups[item.group]), f"Busca {index}/{len(searches)}")
                 query_hash = _hash(item.query)
@@ -84,13 +90,16 @@ class ResearchOrchestrator:
                 cached = await self.repository.get_cached_search(query_hash, expires_after)
                 if cached is not None:
                     hits = cached
+                    logger.info("research %s search %s/%s cache hit: %s results", research_id, index, len(searches), len(hits))
                 else:
                     try:
                         hits = _mock_search(item.query, company) if settings.research_mode == "mock" else await brave_search(item.query, count=8)
+                        logger.info("research %s search %s/%s completed: %s results query=%r", research_id, index, len(searches), len(hits), item.query)
                         await self.repository.increment_usage(research_id, brave_searches=0 if cached is not None else 1)
                         await self.repository.save_search_execution(research_id, item.group.value, item.query, query_hash, hits, "COMPLETED")
                     except Exception as exc:
                         warnings += 1
+                        logger.exception("research %s search failed query=%r", research_id, item.query)
                         await self.repository.increment_usage(research_id, warnings=1)
                         await self.repository.save_search_execution(research_id, item.group.value, item.query, query_hash, [], "FAILED", str(exc))
                         continue
@@ -98,6 +107,7 @@ class ResearchOrchestrator:
                     all_hits.append({**hit, "group": item.group.value, "is_general": item.is_general})
 
             selected_sources = select_relevant_sources(all_hits, company, settings.max_urls_per_research)
+            logger.info("research %s selected %s sources from %s hits", research_id, len(selected_sources), len(all_hits))
             await self.repository.increment_usage(research_id, urls_selected=len(selected_sources))
 
             evidence_by_group: dict[SearchGroup, list[dict[str, Any]]] = {group: [] for group in SearchGroup}
@@ -106,6 +116,7 @@ class ResearchOrchestrator:
                 if processed_pages >= settings.max_firecrawl_pages_per_research:
                     break
                 normalized_url = source["normalized_url"]
+                logger.info("research %s processing source %s/%s: %s", research_id, processed_pages + 1, settings.max_firecrawl_pages_per_research, normalized_url)
                 source_id = await self.repository.upsert_source(
                     research_id,
                     {
@@ -127,9 +138,11 @@ class ResearchOrchestrator:
                     try:
                         page = _mock_document(source, company) if settings.research_mode == "mock" else await scrape(source["url"])
                         processed_pages += 1
+                        logger.info("research %s source completed: %s", research_id, normalized_url)
                         await self.repository.increment_usage(research_id, firecrawl_calls=0 if settings.research_mode == "mock" else 1)
                     except Exception as exc:
                         warnings += 1
+                        logger.exception("research %s source failed: %s", research_id, normalized_url)
                         await self.repository.increment_usage(research_id, warnings=1)
                         continue
                     content = (page or {}).get("markdown", "")[: settings.max_content_chars_per_document]
@@ -187,6 +200,7 @@ class ResearchOrchestrator:
                 if settings.research_mode == "mock":
                     ai_payload = self._mock_answers(question_payload, group_evidences)
                 else:
+                    logger.info("research %s analyzing group %s with %s evidences", research_id, group.value, len(group_evidences))
                     ai_payload = await asyncio.to_thread(analyze_questions, company, question_payload, group_evidences)
                     await self.repository.increment_usage(
                         research_id,
@@ -225,7 +239,9 @@ class ResearchOrchestrator:
             await self.repository.increment_usage(research_id, duration_ms=duration_ms)
             final_status = ResearchStatus.COMPLETED_WITH_WARNINGS if warnings else ResearchStatus.COMPLETED
             await self.repository.update_research_status(research_id, final_status)
+            logger.info("research %s finished with status=%s warnings=%s duration_ms=%s", research_id, final_status.value, warnings, duration_ms)
         except Exception as exc:
+            logger.exception("research %s failed unexpectedly", research_id)
             await self.repository.update_research_status(
                 research_id,
                 ResearchStatus.FAILED,

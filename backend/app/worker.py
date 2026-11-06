@@ -20,7 +20,21 @@ async def run_once(worker_id: str) -> bool:
     logger.info("claimed research %s", research.id)
     if research.status == ResearchStatus.CANCELLED:
         return True
-    await ResearchOrchestrator(repository).run(research.id)
+    try:
+        await asyncio.wait_for(
+            ResearchOrchestrator(repository).run(research.id),
+            timeout=settings.worker_job_timeout_seconds,
+        )
+    except asyncio.TimeoutError:
+        logger.error("research %s exceeded timeout of %ss", research.id, settings.worker_job_timeout_seconds)
+        await repository.update_research_status(
+            research.id,
+            ResearchStatus.FAILED,
+            error_public="A pesquisa demorou mais que o esperado e foi encerrada. Tente novamente.",
+            error_internal=f"worker timeout after {settings.worker_job_timeout_seconds}s",
+        )
+    except Exception:
+        logger.exception("research %s crashed in worker", research.id)
     return True
 
 
